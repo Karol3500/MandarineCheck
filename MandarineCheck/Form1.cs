@@ -79,7 +79,7 @@ namespace MandarineCheck
         {
             imgOriginal = new Image<Bgr, Byte>(openFileDialog1.FileName);
             imOriginalView.Image = imgOriginal;
-            doProcessing();
+            doKMeansProcessing();
             //imOriginalView.Image = drawCircles(imgProcessed, imgOriginal);
 
             /*
@@ -117,6 +117,24 @@ namespace MandarineCheck
                 imProcessedView.Image = null;
             }
             
+        }
+
+        void doKMeansProcessing()
+        {
+            Image<Bgr, float> imgProcessing;
+
+            try
+            {
+                imgProcessing = segmentColors(imgOriginal);
+                //imgOriginal.Draw(imgProcessing.FindContours(), new Bgr(Color.Green), 3);
+                imProcessedView.Image = imgProcessing;
+                //imProcessedView.Image = distinguishObjects(imgProcessing);
+            }
+            catch (NullReferenceException)
+            {
+                imProcessedView.Image = null;
+            }
+
         }
 
         private void button3_Click(object sender, EventArgs e)
@@ -204,6 +222,59 @@ namespace MandarineCheck
             imagePreProcessed._SmoothGaussian(3);
 
             return imagePreProcessed;            
+        }
+
+        private Image<Bgr, float> segmentColors(Image<Bgr, byte> imgToProcess)
+        {
+            Bgr[] clusterColors = new Bgr[]
+            {
+                    new Bgr(255, 255, 255),
+                    new Bgr(0,128,255),
+                    new Bgr(255, 100, 100),
+                    new Bgr(255,0,255),
+                    new Bgr(133,0,99),
+                    new Bgr(130,12,49),
+                    new Bgr(0, 255, 255)
+            };
+
+            int minV = trackBar1.Value, minH = trackBar3.Value, minS = trackBar2.Value;
+            int maxV = trackBar4.Value, maxH = trackBar6.Value, maxS = trackBar5.Value;
+
+            int cannyThresh = trackBar7.Value;
+            int circleAccum = trackBar8.Value, threshLink = trackBar9.Value;
+
+            Image<Bgr, Byte> imagePreProcessed;
+            if (imgToProcess == null) return null;
+
+            //imagePreProcessed = imgToProcess.PyrDown().PyrUp();
+            imagePreProcessed = imgToProcess;
+
+            Matrix<float> samples = new Matrix<float>(imagePreProcessed.Rows * imagePreProcessed.Cols, 1, 3);
+            Matrix<int> finalClusters = new Matrix<int>(imagePreProcessed.Rows * imagePreProcessed.Cols, 1);
+            int clusterCount = 2; 
+            for (int y = 0; y < imagePreProcessed.Rows; y++)
+            {
+                for (int x = 0; x < imagePreProcessed.Cols; x++)
+                {                    
+                    samples.Data[y + x * imagePreProcessed.Rows, 0] = (float)imagePreProcessed[y, x].Blue;
+                    samples.Data[y + x * imagePreProcessed.Rows, 1] = (float)imagePreProcessed[y, x].Green;
+                    samples.Data[y + x * imagePreProcessed.Rows, 2] = (float)imagePreProcessed[y, x].Red;
+                }
+            }
+            MCvTermCriteria crit = new MCvTermCriteria(5);
+
+            CvInvoke.cvKMeans2(samples, clusterCount, finalClusters, crit, 3, IntPtr.Zero, KMeansInitType.PPCenters, IntPtr.Zero, IntPtr.Zero);
+            Image<Bgr, float> new_image = new Image<Bgr, float>(imagePreProcessed.Size);
+
+            for (int y = 0; y < imagePreProcessed.Rows; y++)
+            {
+                for (int x = 0; x < imagePreProcessed.Cols; x++)
+                {
+                    PointF p = new PointF(x, y);
+                    new_image.Draw(new CircleF(p, 1.0f), clusterColors[finalClusters[y + x * imagePreProcessed.Rows, 0]], 1);
+                }
+            }
+            return new_image;
         }
 
         /// <summary>
